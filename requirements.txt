@@ -1,5 +1,5 @@
-streamlit==1.25.0
-pillow==9.5.0
-pandas==2.2.2
-numpy==1.26.4
-openpyxl==3.1.2
+streamlit==1.38.0
+pillow>=10.3.0
+pandas>=1.5.0
+numpy>=1.26.0
+openpyxl>=3.1.0
