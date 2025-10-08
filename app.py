@@ -303,8 +303,18 @@ else:
 report_df = standardize_input_df(report_df)
 processed = compute_sla_and_status(report_df, holidays_df, pd.to_datetime(ref_date))
 
-st.markdown("### Preview (first 50 rows)")
-st.dataframe(processed.head(50), use_container_width=True)
+st.markdown("### Preview")
+# Gunakan data_editor supaya tiap kolom bisa difilter & disort
+filtered_preview = st.data_editor(
+    processed.head(50),
+    use_container_width=True,
+    column_config=None,
+    disabled=True,
+    hide_index=True,
+)
+
+# Tampilkan total baris hasil filter
+st.caption(f"Total rows displayed: **{len(filtered_preview)}** of {len(processed)} total rows")
 
 # Option: show only Telat rows for manual input
 st.markdown("---")
