@@ -1,5 +1,5 @@
 streamlit==1.25.0
-pillow>=10.3.0
 pandas>=1.5.0
-numpy>=1.26.0
-openpyxl>=3.1.0
+openpyxl
+numpy
+pillow>=10.2.0
