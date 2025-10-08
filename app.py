@@ -229,15 +229,16 @@ if uploaded is None:
 
 # read uploaded excel into df
 try:
-    # Fully manual read using openpyxl to avoid invalid datetime conversions
-    wb = load_workbook(uploaded, data_only=True)
-    ws = wb.active
-    data = list(ws.values)
-    df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
-    report_df = df.astype(str)
+    # Use calamine engine (Rust-based) to tolerate slightly corrupted Excel XML
+    report_df = pd.read_excel(uploaded, engine="calamine", dtype=str)
 except Exception as e:
-    st.error(f"Failed to read uploaded Excel: {e}")
-    st.stop()
+    st.warning("Standard engine failed; trying fallback parser...")
+    try:
+        # fallback ke openpyxl kalau calamine gagal
+        report_df = pd.read_excel(uploaded, engine="openpyxl", dtype=str)
+    except Exception as e2:
+        st.error(f"Failed to read uploaded Excel with both engines:\n{e}\n\n{e2}")
+        st.stop()
 
 # Holidays handling
 if holidays_file is not None:
