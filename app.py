@@ -229,16 +229,26 @@ if uploaded is None:
 
 # read uploaded excel into df
 try:
-    # Use calamine engine (Rust-based) to tolerate slightly corrupted Excel XML
-    report_df = pd.read_excel(uploaded, engine="calamine", dtype=str)
-except Exception as e:
-    st.warning("Standard engine failed; trying fallback parser...")
-    try:
-        # fallback ke openpyxl kalau calamine gagal
-        report_df = pd.read_excel(uploaded, engine="openpyxl", dtype=str)
-    except Exception as e2:
-        st.error(f"Failed to read uploaded Excel with both engines:\n{e}\n\n{e2}")
+    # load manually without automatic date conversion
+    wb = load_workbook(uploaded, data_only=True)
+    ws = wb.active
+    data = list(ws.values)
+
+    # ensure non-empty and proper header row
+    if not data or not data[0]:
+        st.error("Uploaded Excel seems empty or malformed.")
         st.stop()
+
+    # build DataFrame manually
+    headers = [str(h).strip() if h is not None else f"Col_{i}" for i, h in enumerate(data[0])]
+    report_df = pd.DataFrame(data[1:], columns=headers)
+
+    # convert all to string to avoid Excel parser issues
+    report_df = report_df.astype(str)
+
+except Exception as e:
+    st.error(f"Failed to read uploaded Excel safely: {e}")
+    st.stop()
 
 # Holidays handling
 if holidays_file is not None:
