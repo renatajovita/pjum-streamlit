@@ -306,16 +306,6 @@ processed = compute_sla_and_status(report_df, holidays_df, pd.to_datetime(ref_da
 st.markdown("### Preview (first 50 rows)")
 st.dataframe(processed.head(50), use_container_width=True)
 
-# Show simple summary
-st.markdown("### Summary")
-cols = st.columns(3)
-with cols[0]:
-    st.metric("Rows", len(processed))
-with cols[1]:
-    st.metric("Count Telat", int((processed["Status"] == "Telat").sum()))
-with cols[2]:
-    st.metric("Count Kegiatan Belum Berakhir", int((processed["Status"] == "Kegiatan Belum Berakhir").sum()))
-
 # Option: show only Telat rows for manual input
 st.markdown("---")
 st.subheader("Manual check & inputs for rows with Status = 'Telat'")
@@ -365,12 +355,22 @@ if manual_mode.startswith("Manual input"):
                 df_for_edit["Tanggal Diterima GPBN"] = df_for_edit["Tanggal Diterima GPBN"].apply(parse_date)
             # recompute status fields after manual input
             df_for_edit = compute_status_after_manual(df_for_edit)
-            st.success("Manual inputs applied and statuses recomputed.")
-            st.dataframe(df_for_edit[df_for_edit["Status"]=="Telat"].head(50), use_container_width=True)
+st.success("Manual inputs applied and statuses recomputed.")
+st.dataframe(df_for_edit[df_for_edit["Status"]=="Telat"].head(50), use_container_width=True)
+
+# --- Tambah summary lengkap setelah manual input ---
+st.markdown("### Summary Setelah Manual Input")
+status_counts = df_for_edit["Status Final"].replace("", np.nan).fillna(df_for_edit["Status"]).value_counts()
+st.write(status_counts.to_frame("Jumlah").reset_index().rename(columns={"index": "Status"}))
 
 # If user chose only compute & download, still allow edits on full df if they want
 if manual_mode.startswith("Only compute"):
     st.info("You chose only compute SLA/status & download. If later you want to manually edit, re-upload or choose manual mode.")
+
+    # Tampilkan summary langsung kalau user tidak manual input
+    st.markdown("### Summary (Tanpa Manual Input)")
+    status_counts_no_manual = processed["Status"].value_counts()
+    st.write(status_counts_no_manual.to_frame("Jumlah").reset_index().rename(columns={"index": "Status"}))
 
 # After possible manual changes recompute final outputs
 # If Status Final has non-empty values, drop original Status column and keep final as requested
@@ -402,13 +402,34 @@ for c in date_cols:
 st.markdown("---")
 st.subheader("Final preview (first 100 rows)")
 st.dataframe(final_df.head(100), use_container_width=True)
+# -----------------------------
+# DOWNLOAD SECTION
+# -----------------------------
+st.markdown("### Download Data")
 
-# Download controls
-st.markdown("### Download final file")
-download_name = st.text_input("Output filename (without extension)", value=f"PJUM_Period_final_{datetime.today().strftime('%Y%m%d')}")
-if st.button("Download Excel"):
-    bio = to_excel_bytes(final_df)
-    st.download_button(label="Download .xlsx", data=bio, file_name=f"{download_name}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+col_dl1, col_dl2 = st.columns(2)
+
+with col_dl1:
+    st.markdown("**⬇️ Download Sebelum Manual Input**")
+    bio_before = to_excel_bytes(processed)
+    st.download_button(
+        label="Download Sebelum Manual Input (.xlsx)",
+        data=bio_before,
+        file_name=f"PJUM_Period_before_manual_{datetime.today().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+
+with col_dl2:
+    st.markdown("**⬇️ Download Setelah Manual Input / Apply Changes**")
+    bio_after = to_excel_bytes(final_df)
+    st.download_button(
+        label="Download Setelah Manual Input (.xlsx)",
+        data=bio_after,
+        file_name=f"PJUM_Period_after_manual_{datetime.today().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
 
 st.markdown("### Notes & tips")
 st.markdown("""
