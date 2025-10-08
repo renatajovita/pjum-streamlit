@@ -227,28 +227,66 @@ if uploaded is None:
     st.info("Upload the BPM report xlsx to start processing.")
     st.stop()
 
-# read uploaded excel into df
+# read uploaded excel into df safely even if partially corrupted
 try:
-    # load manually without automatic date conversion
-    wb = load_workbook(uploaded, data_only=True)
-    ws = wb.active
-    data = list(ws.values)
-
-    # ensure non-empty and proper header row
-    if not data or not data[0]:
-        st.error("Uploaded Excel seems empty or malformed.")
-        st.stop()
-
-    # build DataFrame manually
-    headers = [str(h).strip() if h is not None else f"Col_{i}" for i, h in enumerate(data[0])]
-    report_df = pd.DataFrame(data[1:], columns=headers)
-
-    # convert all to string to avoid Excel parser issues
-    report_df = report_df.astype(str)
-
+    # Try normal openpyxl first
+    report_df = pd.read_excel(uploaded, engine="openpyxl", dtype=str)
 except Exception as e:
-    st.error(f"Failed to read uploaded Excel safely: {e}")
-    st.stop()
+    st.warning("⚠️ openpyxl failed — trying raw recovery mode...")
+
+    import zipfile, tempfile, re
+    from xml.etree import ElementTree as ET
+
+    try:
+        # Extract sheet XML manually (Excel files are ZIP archives)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(uploaded, "r") as z:
+                z.extractall(tmpdir)
+            
+            # Cari semua sheet
+            sheet_files = [f for f in z.namelist() if f.startswith("xl/worksheets/sheet")]
+            if not sheet_files:
+                st.error("No valid sheets found in the uploaded Excel file.")
+                st.stop()
+
+            # Ambil sheet pertama yang masih valid XML
+            sheet_path = None
+            for f in sheet_files:
+                try:
+                    ET.parse(f"{tmpdir}/{f}")
+                    sheet_path = f"{tmpdir}/{f}"
+                    break
+                except ET.ParseError:
+                    continue
+
+            if not sheet_path:
+                st.error("All sheet XMLs are corrupted beyond recovery.")
+                st.stop()
+
+            # Parse XML sheet jadi DataFrame sederhana
+            tree = ET.parse(sheet_path)
+            root = tree.getroot()
+
+            # ambil semua cell
+            rows = []
+            for row in root.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row"):
+                values = []
+                for cell in row:
+                    val = cell.find("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}v")
+                    values.append(val.text if val is not None else "")
+                rows.append(values)
+
+            if not rows:
+                st.error("No readable data found in the Excel sheet.")
+                st.stop()
+
+            headers = [str(x).strip() for x in rows[0]]
+            report_df = pd.DataFrame(rows[1:], columns=headers)
+            report_df = report_df.astype(str)
+
+    except Exception as e2:
+        st.error(f"Failed to recover Excel file: {e}\n\n{e2}")
+        st.stop()
 
 # Holidays handling
 if holidays_file is not None:
