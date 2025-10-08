@@ -308,88 +308,71 @@ st.dataframe(processed.head(50), use_container_width=True)
 
 # Option: show only Telat rows for manual input
 st.markdown("---")
-st.subheader("Manual check & inputs for rows with Status = 'Telat'")
+st.subheader("Manual Input for 'Telat' Rows")
 
-manual_mode = st.radio("Manual workflow", options=["Only compute SLA/status & download (no manual input)", "Manual input for Telat rows now (recommended)"], index=1)
+st.markdown("### Manual input for Telat rows (recommended)")
 
 df_for_edit = processed.copy()
 
-if manual_mode.startswith("Manual input"):
-    # Filter telat rows to present for editing
-    telat_filter = df_for_edit["Status"] == "Telat"
-    telat_rows = df_for_edit[telat_filter].copy()
-    if len(telat_rows) == 0:
-        st.info("No rows with Status = 'Telat' found.")
-    else:
-        st.markdown("**Rows with `Telat` — fill `Nomor SAP PJUM Pertama Kali` and `Tanggal Diterima GPBN` if available.**")
-        st.caption("Edit cells inline, then click 'Apply manual changes'. Date cells accept dd/mm/yyyy or yyyy-mm-dd.")
-        if "Nomor SAP PJUM Pertama Kali" not in telat_rows.columns:
-            telat_rows["Nomor SAP PJUM Pertama Kali"] = ""
-        if "Tanggal Diterima GPBN" not in telat_rows.columns:
-            telat_rows["Tanggal Diterima GPBN"] = pd.NaT
-        show_cols = [c for c in telat_rows.columns if c in [
-            "Assignment", "Doc SAP", "Doc SAP PJUM", "Header Text",
-            "End Date", "SLA PJUM + 10/20HK", "Status",
-            "Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN",
-            "Status No SAP PJUM", "Status Final"
-        ]]
-        edited = st.data_editor(telat_rows[show_cols], num_rows="dynamic", use_container_width=True)
-        if st.button("Apply manual changes"):
-            if "Assignment" in edited.columns and "Assignment" in df_for_edit.columns:
-                edited_map = edited.set_index("Assignment")
-                df_for_edit = df_for_edit.set_index("Assignment")
-                for aid in edited_map.index:
-                    for col in ["Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN"]:
-                        if col in edited_map.columns:
-                            df_for_edit.at[aid, col] = edited_map.at[aid, col]
-                df_for_edit = df_for_edit.reset_index()
-            else:
-                idxs = df_for_edit[df_for_edit["Status"] == "Telat"].index
-                for i, idx in enumerate(idxs):
-                    for col in ["Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN"]:
-                        if col in edited.columns:
-                            df_for_edit.at[idx, col] = edited.iloc[i][col]
-            if "Tanggal Diterima GPBN" in df_for_edit.columns:
-                df_for_edit["Tanggal Diterima GPBN"] = df_for_edit["Tanggal Diterima GPBN"].apply(parse_date)
-            df_for_edit = compute_status_after_manual(df_for_edit)
+# Filter rows yang Telat untuk manual input
+telat_filter = df_for_edit["Status"] == "Telat"
+telat_rows = df_for_edit[telat_filter].copy()
 
-            # Setelah manual input → tampilkan hasil, summary, dan download
-            st.success("Manual inputs applied and statuses recomputed.")
-            st.dataframe(df_for_edit[df_for_edit["Status"] == "Telat"].head(50), use_container_width=True)
-
-            st.markdown("### Summary Setelah Manual Input")
-            status_counts = df_for_edit["Status Final"].replace("", np.nan).fillna(df_for_edit["Status"]).value_counts()
-            total_rows = len(df_for_edit)
-            st.write(f"**Total Rows: {total_rows}**")
-            st.write(status_counts.to_frame("Jumlah").reset_index().rename(columns={"index": "Status"}))
-
+if len(telat_rows) == 0:
+    st.info("No rows with Status = 'Telat' found.")
 else:
-    # Mode tanpa manual input → langsung tampilkan hasil akhir
-    st.info("Only compute SLA/status selected. Displaying results directly.")
-    st.markdown("### Hasil Perhitungan SLA dan Status")
-    st.dataframe(processed.head(100), use_container_width=True)
+    st.markdown("**Rows with `Telat` — fill `Nomor SAP PJUM Pertama Kali` and `Tanggal Diterima GPBN` if available.**")
+    st.caption("Edit cells inline, then click 'Apply manual changes'. Date cells accept dd/mm/yyyy or yyyy-mm-dd.")
 
-    # Summary lengkap
-    st.markdown("### Summary (Tanpa Manual Input)")
-    status_counts_no_manual = processed["Status"].value_counts()
-    total_rows_no_manual = len(processed)
-    st.write(f"**Total Rows: {total_rows_no_manual}**")
-    st.write(status_counts_no_manual.to_frame("Jumlah").reset_index().rename(columns={"index": "Status"}))
+    if "Nomor SAP PJUM Pertama Kali" not in telat_rows.columns:
+        telat_rows["Nomor SAP PJUM Pertama Kali"] = ""
+    if "Tanggal Diterima GPBN" not in telat_rows.columns:
+        telat_rows["Tanggal Diterima GPBN"] = pd.NaT
 
-# If user chose only compute & download, still allow edits on full df if they want
-if manual_mode.startswith("Only compute"):
-    st.info("You chose only compute SLA/status & download. If later you want to manually edit, re-upload or choose manual mode.")
+    show_cols = [c for c in telat_rows.columns if c in [
+        "Assignment", "Doc SAP", "Doc SAP PJUM", "Header Text",
+        "End Date", "SLA PJUM + 10/20HK", "Status",
+        "Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN",
+        "Status No SAP PJUM", "Status Final"
+    ]]
 
-    # Tampilkan summary langsung kalau user tidak manual input
-    st.markdown("### Summary (Tanpa Manual Input)")
-    status_counts_no_manual = processed["Status"].value_counts()
-    st.write(status_counts_no_manual.to_frame("Jumlah").reset_index().rename(columns={"index": "Status"}))
+    edited = st.data_editor(telat_rows[show_cols], num_rows="dynamic", use_container_width=True)
+
+    if st.button("Apply manual changes"):
+        if "Assignment" in edited.columns and "Assignment" in df_for_edit.columns:
+            edited_map = edited.set_index("Assignment")
+            df_for_edit = df_for_edit.set_index("Assignment")
+            for aid in edited_map.index:
+                for col in ["Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN"]:
+                    if col in edited_map.columns:
+                        df_for_edit.at[aid, col] = edited_map.at[aid, col]
+            df_for_edit = df_for_edit.reset_index()
+        else:
+            idxs = df_for_edit[df_for_edit["Status"] == "Telat"].index
+            for i, idx in enumerate(idxs):
+                for col in ["Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN"]:
+                    if col in edited.columns:
+                        df_for_edit.at[idx, col] = edited.iloc[i][col]
+
+        if "Tanggal Diterima GPBN" in df_for_edit.columns:
+            df_for_edit["Tanggal Diterima GPBN"] = df_for_edit["Tanggal Diterima GPBN"].apply(parse_date)
+
+        df_for_edit = compute_status_after_manual(df_for_edit)
+
+        st.success("Manual inputs applied and statuses recomputed.")
+        st.dataframe(df_for_edit[df_for_edit["Status"] == "Telat"].head(50), use_container_width=True)
+
+        # Sekalian tampilkan summary setelah manual input
+        st.markdown("### Summary Setelah Manual Input")
+        status_counts = df_for_edit["Status Final"].replace("", np.nan).fillna(df_for_edit["Status"]).value_counts()
+        total_rows = len(df_for_edit)
+        st.write(f"**Total Rows: {total_rows}**")
+        st.write(status_counts.to_frame("Jumlah").reset_index().rename(columns={"index": "Status"}))
 
 # After possible manual changes recompute final outputs
 # If Status Final has non-empty values, drop original Status column and keep final as requested
 final_df = df_for_edit.copy()
-if manual_mode.startswith("Only compute"):
-    final_df = processed.copy()
+
 # If any 'Status Final' non-empty, replace
 if final_df["Status Final"].replace("", np.nan).notna().any():
     # drop old Status
