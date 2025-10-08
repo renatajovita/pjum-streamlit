@@ -6,9 +6,8 @@ from io import BytesIO
 from datetime import datetime, timedelta
 import calendar
 from openpyxl import load_workbook
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-st.set_page_config(page_title="automatics reporting", layout="wide")
+st.set_page_config(page_title="PJUM PJUM Perdin", layout="wide")
 
 # -------------------------
 # Helper functions
@@ -304,16 +303,8 @@ else:
 report_df = standardize_input_df(report_df)
 processed = compute_sla_and_status(report_df, holidays_df, pd.to_datetime(ref_date))
 
-st.markdown("### Preview")
-
-st.caption("You can filter or sort directly from the table below.")
-st.data_editor(
-    processed.head(50),
-    use_container_width=True,
-    num_rows="dynamic",
-    column_config=None,
-    hide_index=True
-)
+st.markdown("### Preview (first 50 rows)")
+st.dataframe(processed.head(50), use_container_width=True)
 
 # Option: show only Telat rows for manual input
 st.markdown("---")
