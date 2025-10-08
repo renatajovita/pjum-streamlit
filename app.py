@@ -5,6 +5,7 @@ import numpy as np
 from io import BytesIO
 from datetime import datetime, timedelta
 import calendar
+from openpyxl import load_workbook
 
 st.set_page_config(page_title="PJUM Perdin Processor", layout="wide")
 
@@ -228,8 +229,12 @@ if uploaded is None:
 
 # read uploaded excel into df
 try:
-    # Disable automatic date parsing to avoid invalid datetime errors
-    report_df = pd.read_excel(uploaded, engine="openpyxl", dtype=str)
+    # Fully manual read using openpyxl to avoid invalid datetime conversions
+    wb = load_workbook(uploaded, data_only=True)
+    ws = wb.active
+    data = list(ws.values)
+    df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+    report_df = df.astype(str)
 except Exception as e:
     st.error(f"Failed to read uploaded Excel: {e}")
     st.stop()
