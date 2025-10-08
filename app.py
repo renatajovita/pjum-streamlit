@@ -203,7 +203,7 @@ st.title("PJUM Perdin — Streamlit Processor")
 st.markdown("Upload BPM report (xlsx) and Holidays (xlsx). This app will add SLA, Status, manual-input columns and allow final download.")
 
 # Sidebar menu
-menu = st.sidebar.selectbox("Menu", ["Perdin Processor", "PJUM Kegiatan (placeholder)", "Status Pembayaran (placeholder)", "Dashboard (placeholder)"])
+menu = st.sidebar.selectbox("Menu", ["PJUM Perdin", "PJUM Kegiatan (placeholder)", "Status Pembayaran (placeholder)", "Dashboard (placeholder)"])
 st.sidebar.markdown("---")
 st.sidebar.info("For now only *Perdin Processor* is active. Other modules are placeholders.")
 
