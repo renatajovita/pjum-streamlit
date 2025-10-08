@@ -228,7 +228,8 @@ if uploaded is None:
 
 # read uploaded excel into df
 try:
-    report_df = pd.read_excel(uploaded, engine="openpyxl")
+    # Disable automatic date parsing to avoid invalid datetime errors
+    report_df = pd.read_excel(uploaded, engine="openpyxl", dtype=str)
 except Exception as e:
     st.error(f"Failed to read uploaded Excel: {e}")
     st.stop()
@@ -236,7 +237,7 @@ except Exception as e:
 # Holidays handling
 if holidays_file is not None:
     try:
-        holidays_df = pd.read_excel(holidays_file, engine="openpyxl")
+        holidays_df = pd.read_excel(holidays_file, engine="openpyxl", dtype=str)
     except Exception as e:
         st.error(f"Failed to read holidays Excel: {e}")
         st.stop()
