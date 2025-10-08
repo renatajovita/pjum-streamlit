@@ -305,39 +305,15 @@ report_df = standardize_input_df(report_df)
 processed = compute_sla_and_status(report_df, holidays_df, pd.to_datetime(ref_date))
 
 st.markdown("### Preview")
-# Build AgGrid filterable table
-gb = GridOptionsBuilder.from_dataframe(processed)
-gb.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=25)
-gb.configure_default_column(
-    filter=True,
-    sortable=True,
-    resizable=True,
-    editable=False,
-    wrapText=True,
-    autoHeight=True
+
+st.caption("You can filter or sort directly from the table below.")
+st.data_editor(
+    processed.head(50),
+    use_container_width=True,
+    num_rows="dynamic",
+    column_config=None,
+    hide_index=True
 )
-gb.configure_side_bar()  # Adds a sidebar with filter tools
-grid_options = gb.build()
-
-grid_response = AgGrid(
-    processed,
-    gridOptions=grid_options,
-    enable_enterprise_modules=False,
-    update_mode=GridUpdateMode.NO_UPDATE,
-    fit_columns_on_grid_load=True,
-    height=500,
-    theme="balham",
-)
-
-filtered_df = grid_response["data"]
-
-# Display total rows info after filter
-total_rows = len(processed)
-filtered_rows = len(filtered_df)
-st.write(f"**Total Rows (all): {total_rows} | After filter: {filtered_rows}**")
-
-# Tampilkan total baris hasil filter
-st.caption(f"Total rows displayed: **{len(filtered_preview)}** of {len(processed)} total rows")
 
 # Option: show only Telat rows for manual input
 st.markdown("---")
