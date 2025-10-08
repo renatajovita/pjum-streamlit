@@ -17,13 +17,17 @@ def parse_date(value):
     if isinstance(value, (datetime, pd.Timestamp)):
         return pd.to_datetime(value).normalize()
     text = str(value).strip()
-    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y"):
+    # Explicitly handle both 2-digit and 4-digit year formats, always day-first
+    for fmt in ("%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d-%m-%y", "%Y-%m-%d", "%m/%d/%Y"):
         try:
-            return pd.to_datetime(text, format=fmt).normalize()
+            parsed = datetime.strptime(text, fmt)
+            # normalize to midnight
+            return pd.to_datetime(parsed).normalize()
         except Exception:
-            pass
+            continue
+    # fallback: let pandas infer but enforce dayfirst
     try:
-        return pd.to_datetime(text, dayfirst=True).normalize()
+        return pd.to_datetime(text, dayfirst=True, errors="coerce").normalize()
     except Exception:
         return pd.NaT
 
@@ -334,6 +338,11 @@ orig_cols = [c for c in report_df.columns]
 append_order = ["SLA PJUM + 10/20HK","Status","Nomor SAP PJUM Pertama Kali","Tanggal Diterima GPBN","Status No SAP PJUM","Status Final"]
 cols_to_keep = orig_cols + [c for c in append_order if c in final_df.columns]
 final_df = final_df.reindex(columns=cols_to_keep)
+
+# Ensure displayed date format
+date_cols = [c for c in final_df.columns if 'Date' in c or 'Tanggal' in c]
+for c in date_cols:
+    final_df[c] = final_df[c].dt.strftime("%d/%m/%y")
 
 st.markdown("---")
 st.subheader("Final preview (first 100 rows)")
