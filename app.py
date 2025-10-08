@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import calendar
 from openpyxl import load_workbook
 
-st.set_page_config(page_title="PJUM Perdin Processor", layout="wide")
+st.set_page_config(page_title="PJUM PJUM Perdin", layout="wide")
 
 # -------------------------
 # Helper functions
@@ -205,15 +205,15 @@ st.markdown("Upload BPM report (xlsx) and Holidays (xlsx). This app will add SLA
 # Sidebar menu
 menu = st.sidebar.selectbox("Menu", ["PJUM Perdin", "PJUM Kegiatan (placeholder)", "Status Pembayaran (placeholder)", "Dashboard (placeholder)"])
 st.sidebar.markdown("---")
-st.sidebar.info("For now only *Perdin Processor* is active. Other modules are placeholders.")
+st.sidebar.info("For now only *PJUM Perdin* is active. Other modules are placeholders.")
 
-if menu != "Perdin Processor":
+if menu != "PJUM Perdin":
     st.header(menu)
     st.info("This section is still empty (placeholder). Come back soon.")
     st.stop()
 
-# Perdin Processor UI
-st.header("Perdin Processor (Report PJUM Perdin)")
+# PJUM Perdin UI
+st.header("PJUM Perdin (Report PJUM Perdin)")
 col1, col2 = st.columns([1, 1])
 with col1:
     uploaded = st.file_uploader("Upload PJUM Perdin report (.xlsx)", type=["xlsx"], help="Make sure the sheet starts with headers like Assignment, Doc SAP, Header Text, Posting Date, End Date, Posting Date PJUM, Doc SAP PJUM, etc.")
