@@ -314,76 +314,84 @@ else:
 # Standardize and compute
 report_df = standardize_input_df(report_df)
 processed = compute_sla_and_status(report_df, holidays_df, pd.to_datetime(ref_date))
-# ============================================================
-# ✅ MERGE DENGAN DATABASE LAMA (super robust match)
-# ============================================================
-st.subheader("Optional: Merge with existing 'DATA PERDIN Latest' database")
+st.markdown("### Optional: Merge with existing 'DATA PERDIN Latest' database")
 
-uploaded_db = st.file_uploader(
-    "Upload existing DATA PERDIN Latest (.xlsx)", type=["xlsx"], key="db_perdin"
-)
+db_url = "https://docs.google.com/spreadsheets/d/1wWNnV6GAiV2pfUBcGl3aYqD0mqQ1_EkSbGLmUH9b1Tg/export?format=xlsx&gid=801874172"
 
-if uploaded_db:
-    try:
-        db_df = pd.read_excel(uploaded_db, dtype=str)
-        st.success("Database lama berhasil dimuat dari file Excel.")
-        st.write("Kolom yang akan dimapping: Header Text, Nilai, Name, Doc SAP PJUM")
+try:
+    db_df = pd.read_excel(db_url, sheet_name="DATA PERDIN Latest", engine="openpyxl")
+    db_df = standardize_input_df(db_df)
+    st.success("Database lama berhasil dimuat dari Google Sheets.")
 
-        # --- Normalisasi fungsi yang tahan format ---
-        def normalize_key(val):
-            if pd.isna(val):
+    # --- Kolom untuk mapping dan kolom tambahan yang akan diambil ---
+    key_cols = ["Header Text", "Nilai", "Name", "Doc SAP PJUM"]
+    extra_cols = [
+        "Doc SAP PJUM Pertama Kali",
+        "Tanggal Masuk GPBN",
+        "Posting Date PJUM yang awal input",
+        "Tanggal Input oleh unit kerja",
+        "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
+    ]
+
+    # Pastikan hanya kolom ini yang dimapping, yang lain diabaikan
+    st.info("Kolom yang akan dimapping: Header Text, Nilai, Name, dan Doc SAP PJUM")
+
+    # Hilangkan duplikat dari database lama (ambil yang pertama ditemukan saja)
+    db_df = db_df.drop_duplicates(subset=key_cols, keep="first")
+
+    available_keys = [c for c in key_cols if c in db_df.columns and c in processed.columns]
+    available_extras = [c for c in extra_cols if c in db_df.columns]
+
+    if not available_keys:
+        st.warning("⚠️ Tidak ada kolom pencocokan yang cocok di kedua dataset.")
+    else:
+        st.info(f"Kolom pencocokan: {', '.join(available_keys)}")
+        st.info(f"Kolom tambahan yang akan diambil: {', '.join(available_extras)}")
+
+        # --- Normalisasi fungsi biar pencocokan lebih fleksibel ---
+        def normalize_text(x):
+            if pd.isna(x):
                 return ""
-            s = str(val).lower().strip()
-            s = s.replace("idr", "").replace("usd", "")
-            s = s.replace("rp", "").replace("us$", "")
-            s = s.replace(",", "").replace(".", "")
-            s = s.replace(" ", "").replace(" ", "")  # hapus spasi & spasi non-breaking
-            s = s.replace("-", "").replace("–", "")
-            return s
+            x = str(x).strip().lower()
+            x = x.replace(",", "").replace(".", "").replace("idr", "").replace("usd", "")
+            x = x.replace(" ", "").replace("\xa0", "")  # hapus spasi aneh
+            return x
 
-        # --- Pastikan kolom yang dipakai tersedia ---
-        match_cols = ["Header Text", "Nilai", "Name", "Doc SAP PJUM"]
-        for col in match_cols:
-            if col not in processed.columns or col not in db_df.columns:
-                st.error(f"Kolom '{col}' tidak ditemukan di salah satu file.")
-                st.stop()
+        # Normalisasi kolom kunci di dua dataset
+        for c in available_keys:
+            processed[f"norm_{c}"] = processed[c].apply(normalize_text)
+            db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
 
-        # --- Tambah kolom normalized di dua dataframe ---
-        for col in match_cols:
-            processed[f"key_{col}"] = processed[col].apply(normalize_key)
-            db_df[f"key_{col}"] = db_df[col].apply(normalize_key)
+        # --- Buat dictionary lookup: key tuple → kolom tambahan ---
+        db_lookup = {}
+        for _, r in db_df.iterrows():
+            key_tuple = tuple(r[f"norm_{c}"] for c in available_keys)
+            if key_tuple not in db_lookup:
+                db_lookup[key_tuple] = {c: r.get(c, None) for c in available_extras}
 
-        # --- Buat composite key ---
-        processed["join_key"] = processed[[f"key_{c}" for c in match_cols]].agg("_".join, axis=1)
-        db_df["join_key"] = db_df[[f"key_{c}" for c in match_cols]].agg("_".join, axis=1)
+        # Tambahkan kolom tambahan ke processed (kalau belum ada)
+        for c in available_extras:
+            if c not in processed.columns:
+                processed[c] = None
 
-        # --- Merge (left join, update kolom tambahan dari DB lama) ---
-        extra_cols = [
-            "Doc SAP PJUM Pertama Kali",
-            "Tanggal Masuk GPBN",
-            "Posting Date PJUM yang awal input",
-            "Tanggal Input oleh unit kerja",
-            "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
-        ]
+        matched_rows = 0
+        for idx, row in processed.iterrows():
+            key = tuple(row[f"norm_{c}"] for c in available_keys)
+            if key in db_lookup:
+                for c in available_extras:
+                    processed.at[idx, c] = db_lookup[key].get(c)
+                matched_rows += 1
 
-        merged = processed.merge(
-            db_df[["join_key"] + extra_cols],
-            on="join_key",
-            how="left",
-            suffixes=("", "_db")
-        )
+        st.success(f"✅ {matched_rows} baris berhasil diperbarui dari database lama.")
 
-        # --- Hitung berapa baris yang berhasil update ---
-        updated_rows = merged[extra_cols].notna().any(axis=1).sum()
-        st.success(f"✅ {updated_rows} baris berhasil diperbarui dari database lama.")
+        # Clean kolom bantu
+        processed.drop(columns=[f"norm_{c}" for c in available_keys], inplace=True)
 
-        # --- Drop kolom bantu ---
-        merged.drop(columns=[c for c in merged.columns if c.startswith("key_") or c == "join_key"], inplace=True)
+        st.caption("Contoh hasil update dari database lama:")
+        st.dataframe(processed.head(10), use_container_width=True)
 
-        processed = merged.copy()
-
-    except Exception as e:
-        st.error(f"Gagal memuat database lama: {e}")
+except Exception as e:
+    st.warning(f"Gagal memuat database lama: {e}")
 
 st.markdown("### Preview (first 50 rows)")
 st.dataframe(processed.head(50), use_container_width=True)
