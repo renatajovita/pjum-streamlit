@@ -369,23 +369,10 @@ try:
         x = x.replace(" ", "").replace("\xa0", "")
         return x
 
-    # Normalisasi kunci → pastikan semua string, lowercase, trim
-    def normalize_key(x):
-        if pd.isna(x):
-            return ""
-        x = str(x).strip().lower()
-        x = x.replace(",", "").replace(".", "")
-        x = x.replace(" ", "").replace("\xa0", "")
-        return x
-
+    # Normalisasi kunci
     for c in real_key_cols:
-        # pastikan numeric juga jadi string
-        processed[c] = processed[c].astype(str)
-        db_df[c] = db_df[c].astype(str)
-
-    # normalisasi
-    processed[f"norm_{c}"] = processed[c].apply(normalize_key)
-    db_df[f"norm_{c}"] = db_df[c].apply(normalize_key)
+        processed[f"norm_{c}"] = processed[c].apply(normalize_text)
+        db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
 
     # Buat dictionary lookup
     # --- Sinkronisasi data lama ke file upload (versi fleksibel tanpa error unique) ---
@@ -404,14 +391,10 @@ try:
     db_sub = db_sub.drop_duplicates(subset=available_keys, keep="first")
 
     # Merge: left join antara processed dan db_sub
-    # merge berdasarkan kolom norm_*
-    norm_keys = [f"norm_{c}" for c in real_key_cols]
-
     merged = pd.merge(
         processed,
         db_sub,
-        left_on=norm_keys,
-        right_on=norm_keys,
+        on=available_keys,
         how="left",
         suffixes=("", "_db")
     )
