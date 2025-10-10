@@ -371,15 +371,15 @@ else:
     if "Tanggal Masuk GPBN" not in telat_rows.columns:
         telat_rows["Tanggal Masuk GPBN"] = pd.NaT
 
-show_cols = [c for c in telat_rows.columns if c in [
-    "Assignment", "Doc SAP", "Doc SAP PJUM", "Header Text",
-    "End Date", "10HK/20HK", "Status",
-    "Nomor SAP PJUM Pertama Kali", "Tanggal Masuk GPBN",
-    "Posting Date PJUM (awal input)",
-    "Tanggal Input Unit Kerja",
-    "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari",
-    "Status No SAP PJUM", "Status Final"
-]]
+    show_cols = [c for c in telat_rows.columns if c in [
+        "Assignment", "Doc SAP", "Doc SAP PJUM", "Header Text",
+        "End Date", "10HK/20HK", "Status",
+        "Nomor SAP PJUM Pertama Kali", "Tanggal Masuk GPBN",
+        "Posting Date PJUM (awal input)",
+        "Tanggal Input Unit Kerja",
+        "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari",
+        "Status No SAP PJUM", "Status Final"
+    ]]
 
     edited = st.data_editor(telat_rows[show_cols], num_rows="dynamic", use_container_width=True)
 
