@@ -323,146 +323,85 @@ try:
     db_df = standardize_input_df(db_df)
     st.success("Database lama berhasil dimuat dari Google Sheets.")
 
-# --- Kolom untuk mapping dan kolom tambahan yang akan diambil ---
-key_cols = ["Header Text", "Nilai", "Name", "Doc SAP PJUM"]
-extra_cols = [
-    "Doc SAP PJUM Pertama Kali",
-    "Tanggal Masuk GPBN",
-    "Posting Date PJUM yang awal input",
-    "Tanggal Input oleh unit kerja",
-    "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
-]
+    # --- Kolom untuk mapping dan kolom tambahan yang akan diambil ---
+    key_cols = ["Header Text", "Nilai", "Name", "Doc SAP PJUM"]
+    extra_cols = [
+        "Doc SAP PJUM Pertama Kali",
+        "Tanggal Masuk GPBN",
+        "Posting Date PJUM yang awal input",
+        "Tanggal Input oleh unit kerja",
+        "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
+    ]
 
-# Alias untuk fleksibilitas nama kolom (misal Name vs Nama)
-aliases = {
-    "Name": ["Name", "Nama"],
-    "Header Text": ["Header Text"],
-    "Nilai": ["Nilai"],
-    "Doc SAP PJUM": ["Doc SAP PJUM"],
-}
+    # Alias fleksibel
+    aliases = {
+        "Name": ["Name", "Nama"],
+        "Header Text": ["Header Text"],
+        "Nilai": ["Nilai"],
+        "Doc SAP PJUM": ["Doc SAP PJUM"],
+    }
 
-# Cek kolom yang tersedia di masing-masing dataframe
-processed_cols = list(processed.columns)
-db_cols = list(db_df.columns)
+    processed_cols = list(processed.columns)
+    db_cols = list(db_df.columns)
 
-# Ganti kolom kunci yang ga ada tapi punya alias
-real_key_cols = []
-for base_key, alt_names in aliases.items():
-    found = None
-    for alt in alt_names:
-        if alt in processed_cols and alt in db_cols:
-            found = alt
-            break
-    if found:
-        real_key_cols.append(found)
-    else:
-        st.warning(f"⚠️ Kolom {base_key} tidak ditemukan di salah satu dataset.")
+    # Cek alias kolom yang cocok di kedua dataframe
+    real_key_cols = []
+    for base_key, alt_names in aliases.items():
+        found = None
+        for alt in alt_names:
+            if alt in processed_cols and alt in db_cols:
+                found = alt
+                break
+        if found:
+            real_key_cols.append(found)
+        else:
+            st.warning(f"⚠️ Kolom {base_key} tidak ditemukan di salah satu dataset.")
 
-st.info(f"Kolom pencocokan akhir: {', '.join(real_key_cols)}")
+    st.info(f"Kolom pencocokan akhir: {', '.join(real_key_cols)}")
 
-# Drop duplikat di database lama berdasarkan 4 kolom itu (ambil yang pertama aja)
-db_df = db_df.drop_duplicates(subset=real_key_cols, keep="first")
+    # Drop duplikat dari database lama berdasarkan kombinasi kunci
+    db_df = db_df.drop_duplicates(subset=real_key_cols, keep="first")
 
-# Normalisasi fungsi
-def normalize_text(x):
-    if pd.isna(x):
-        return ""
-    x = str(x).strip().lower()
-    x = x.replace(",", "").replace(".", "").replace("idr", "").replace("usd", "")
-    x = x.replace(" ", "").replace("\xa0", "")
-    return x
+    def normalize_text(x):
+        if pd.isna(x):
+            return ""
+        x = str(x).strip().lower()
+        x = x.replace(",", "").replace(".", "").replace("idr", "").replace("usd", "")
+        x = x.replace(" ", "").replace("\xa0", "")
+        return x
 
-# Normalisasi nilai key
-for c in real_key_cols:
-    processed[f"norm_{c}"] = processed[c].apply(normalize_text)
-    db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
+    # Normalisasi kunci
+    for c in real_key_cols:
+        processed[f"norm_{c}"] = processed[c].apply(normalize_text)
+        db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
 
-# Buat dictionary lookup (key tuple → kolom tambahan)
-db_lookup = {}
-for _, r in db_df.iterrows():
-    key_tuple = tuple(r[f"norm_{c}"] for c in real_key_cols)
-    if key_tuple not in db_lookup:
-        db_lookup[key_tuple] = {c: r.get(c, None) for c in extra_cols if c in db_df.columns}
+    # Buat dictionary lookup
+    db_lookup = {}
+    for _, r in db_df.iterrows():
+        key_tuple = tuple(r[f"norm_{c}"] for c in real_key_cols)
+        if key_tuple not in db_lookup:
+            db_lookup[key_tuple] = {c: r.get(c, None) for c in extra_cols if c in db_df.columns}
 
-# Tambahkan kolom tambahan kalau belum ada
-for c in extra_cols:
-    if c not in processed.columns:
-        processed[c] = None
+    # Tambahkan kolom tambahan kalau belum ada
+    for c in extra_cols:
+        if c not in processed.columns:
+            processed[c] = None
 
-# Update baris di processed berdasarkan database lama
-matched_rows = 0
-for idx, row in processed.iterrows():
-    key_tuple = tuple(row[f"norm_{c}"] for c in real_key_cols)
-    if key_tuple in db_lookup:
-        for c, val in db_lookup[key_tuple].items():
-            processed.at[idx, c] = val
-        matched_rows += 1
+    matched_rows = 0
+    for idx, row in processed.iterrows():
+        key_tuple = tuple(row[f"norm_{c}"] for c in real_key_cols)
+        if key_tuple in db_lookup:
+            for c, val in db_lookup[key_tuple].items():
+                processed.at[idx, c] = val
+            matched_rows += 1
 
-st.success(f"✅ {matched_rows} baris berhasil diperbarui dari database lama (berdasarkan kombinasi {', '.join(real_key_cols)}).")
+    st.success(f"✅ {matched_rows} baris berhasil diperbarui dari database lama (berdasarkan kombinasi {', '.join(real_key_cols)}).")
 
-# Bersihkan kolom bantu norm_
-processed.drop(columns=[f"norm_{c}" for c in real_key_cols], inplace=True, errors="ignore")
+    # Bersihkan kolom bantu
+    processed.drop(columns=[f"norm_{c}" for c in real_key_cols], inplace=True, errors="ignore")
 
-st.caption("Contoh hasil update dari database lama:")
-st.dataframe(processed.head(10), use_container_width=True)
-
-
-    # Pastikan hanya kolom ini yang dimapping, yang lain diabaikan
-    st.info("Kolom yang akan dimapping: Header Text, Nilai, Name, dan Doc SAP PJUM")
-
-    # Hilangkan duplikat dari database lama (ambil yang pertama ditemukan saja)
-    db_df = db_df.drop_duplicates(subset=key_cols, keep="first")
-
-    available_keys = [c for c in key_cols if c in db_df.columns and c in processed.columns]
-    available_extras = [c for c in extra_cols if c in db_df.columns]
-
-    if not available_keys:
-        st.warning("⚠️ Tidak ada kolom pencocokan yang cocok di kedua dataset.")
-    else:
-        st.info(f"Kolom pencocokan: {', '.join(available_keys)}")
-        st.info(f"Kolom tambahan yang akan diambil: {', '.join(available_extras)}")
-
-        # --- Normalisasi fungsi biar pencocokan lebih fleksibel ---
-        def normalize_text(x):
-            if pd.isna(x):
-                return ""
-            x = str(x).strip().lower()
-            x = x.replace(",", "").replace(".", "").replace("idr", "").replace("usd", "")
-            x = x.replace(" ", "").replace("\xa0", "")  # hapus spasi aneh
-            return x
-
-        # Normalisasi kolom kunci di dua dataset
-        for c in available_keys:
-            processed[f"norm_{c}"] = processed[c].apply(normalize_text)
-            db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
-
-        # --- Buat dictionary lookup: key tuple → kolom tambahan ---
-        db_lookup = {}
-        for _, r in db_df.iterrows():
-            key_tuple = tuple(r[f"norm_{c}"] for c in available_keys)
-            if key_tuple not in db_lookup:
-                db_lookup[key_tuple] = {c: r.get(c, None) for c in available_extras}
-
-        # Tambahkan kolom tambahan ke processed (kalau belum ada)
-        for c in available_extras:
-            if c not in processed.columns:
-                processed[c] = None
-
-        matched_rows = 0
-        for idx, row in processed.iterrows():
-            key = tuple(row[f"norm_{c}"] for c in available_keys)
-            if key in db_lookup:
-                for c in available_extras:
-                    processed.at[idx, c] = db_lookup[key].get(c)
-                matched_rows += 1
-
-        st.success(f"✅ {matched_rows} baris berhasil diperbarui dari database lama.")
-
-        # Clean kolom bantu
-        processed.drop(columns=[f"norm_{c}" for c in available_keys], inplace=True)
-
-        st.caption("Contoh hasil update dari database lama:")
-        st.dataframe(processed.head(10), use_container_width=True)
+    st.caption("Contoh hasil update dari database lama:")
+    st.dataframe(processed.head(10), use_container_width=True)
 
 except Exception as e:
     st.warning(f"Gagal memuat database lama: {e}")
