@@ -156,18 +156,22 @@ def compute_sla_and_status(df, holidays_df, ref_date):
     # add empty manual columns per spec
     df["Nomor SAP PJUM Pertama Kali"] = df.get("Nomor SAP PJUM Pertama Kali", "")
     df["Tanggal Masuk GPBN"] = df["Tanggal Masuk GPBN"].apply(parse_date) if "Tanggal Masuk GPBN" in df.columns else pd.NaT
+
     # Kolom tambahan baru
-for col in [
-    "Posting Date PJUM (awal input)",
-    "Tanggal Input Unit Kerja",
-    "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari"
-]:
-    if col not in df.columns:
-        df[col] = pd.NaT
+    for col in [
+        "Posting Date PJUM (awal input)",
+        "Tanggal Input Unit Kerja",
+        "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari"
+    ]:
+        if col not in df.columns:
+            df[col] = pd.NaT
+
     # compute Status No SAP PJUM (blank if no manual input)
     df["Status No SAP PJUM"] = ""
+
     # Status Final will be created later after manual input
     df["Status Final"] = ""
+
     return df
 
 def compute_status_after_manual(df):
