@@ -325,49 +325,51 @@ try:
     db_df = standardize_input_df(db_df)
     st.success("Database lama berhasil dimuat dari Google Sheets.")
 
-    # Kolom kunci dan kolom tambahan
+    # --- Kolom kunci & kolom yang akan diambil ---
     merge_keys = ["Assignment", "Doc SAP", "Header Text", "Personal Number", "Name"]
-    common_cols = [
-        "Doc SAP PJUM Pertama Kali",
-        "Tanggal Masuk GPBN",
-        "Posting Date PJUM yang awal input",
-        "Tanggal Input oleh unit kerja",
-        "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
-    ]
+    common_cols = ["Header Text", "Nilai", "Nama", "Doc SAP PJUM"]
 
-    # --- Standarisasi nilai kunci agar match meski beda kapital / spasi / tipe data ---
-    for key in merge_keys:
-        processed[key] = processed[key].astype(str).str.strip().str.upper()
-        db_df[key] = db_df[key].astype(str).str.strip().str.upper()
+    # Pastikan kolom-kolom itu ada di database lama
+    existing_cols = [col for col in common_cols if col in db_df.columns]
+    if not existing_cols:
+        st.warning("⚠️ Tidak ada kolom cocok ditemukan di database lama.")
+    else:
+        st.write(f"Kolom yang akan dimapping: {', '.join(existing_cols)}")
 
-    # --- Merge fleksibel berdasarkan key ---
-    merged = processed.merge(
-        db_df[merge_keys + common_cols],
-        on=merge_keys,
-        how="left",
-        suffixes=("", "_db")
-    )
+        # --- Samakan format key agar bisa match meskipun beda kapital/spasi ---
+        for key in merge_keys:
+            if key in processed.columns and key in db_df.columns:
+                processed[key] = processed[key].astype(str).str.strip().str.upper()
+                db_df[key] = db_df[key].astype(str).str.strip().str.upper()
 
-    # Gabungkan nilai dari database lama (jangan timpa data baru)
-    for col in common_cols:
-        merged[col] = merged[col].combine_first(merged.get(f"{col}_db"))
-        if f"{col}_db" in merged.columns:
-            merged.drop(columns=[f"{col}_db"], inplace=True)
+        # --- Merge fleksibel ---
+        merged = processed.merge(
+            db_df[merge_keys + existing_cols],
+            on=merge_keys,
+            how="left",
+            suffixes=("", "_db")
+        )
 
-    # Hitung berapa baris berhasil match
-    matched = merged[common_cols].notna().any(axis=1).sum()
-    total = len(merged)
-    st.info(f"✅ {matched}/{total} baris berhasil menarik data dari database lama.")
+        # Gabungkan data lama tanpa menimpa data baru
+        for col in existing_cols:
+            col_db = f"{col}_db"
+            if col_db in merged.columns:
+                merged[col] = merged[col].combine_first(merged[col_db])
+                merged.drop(columns=[col_db], inplace=True)
 
-    processed = merged
+        # Hitung berapa baris berhasil dapat data dari database lama
+        matched = merged[existing_cols].notna().any(axis=1).sum()
+        total = len(merged)
+        st.info(f"✅ {matched}/{total} baris berhasil menarik data dari database lama.")
 
-    # (Opsional) Preview 10 baris hasil match
-    st.caption("Contoh data yang berhasil ditarik dari database lama:")
-    st.dataframe(merged[merged[common_cols].notna().any(axis=1)].head(10), use_container_width=True)
+        # Tampilkan contoh hasil merge
+        st.caption("Contoh hasil merge:")
+        st.dataframe(merged[merged[existing_cols].notna().any(axis=1)].head(10), use_container_width=True)
+
+        processed = merged
 
 except Exception as e:
     st.warning(f"Gagal memuat database lama: {e}")
-
 
 st.markdown("### Preview (first 50 rows)")
 st.dataframe(processed.head(50), use_container_width=True)
