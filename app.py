@@ -324,13 +324,13 @@ try:
     st.success("Database lama berhasil dimuat dari Google Sheets.")
 
     merge_keys = ["Assignment", "Doc SAP", "Header Text", "Personal Number", "Name"]
-    common_cols = [
-        "Nomor SAP PJUM Pertama Kali",
-        "Tanggal Masuk GPBN",
-        "Posting Date PJUM (awal input)",
-        "Tanggal Input Unit Kerja",
-        "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari"
-    ]
+common_cols = [
+    "Doc SAP PJUM Pertama Kali",
+    "Tanggal Masuk GPBN",
+    "Posting Date PJUM yang awal input",
+    "Tanggal Input oleh unit kerja",
+    "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
+]
 
     merged = processed.merge(
         db_df[merge_keys + common_cols],
