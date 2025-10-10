@@ -318,11 +318,14 @@ processed = compute_sla_and_status(report_df, holidays_df, pd.to_datetime(ref_da
 st.markdown("### Optional: Merge with existing 'DATA PERDIN Latest' database")
 
 db_url = "https://docs.google.com/spreadsheets/d/1wWNnV6GAiV2pfUBcGl3aYqD0mqQ1_EkSbGLmUH9b1Tg/export?format=xlsx&gid=801874172"
+
 try:
+    # Load data lama
     db_df = pd.read_excel(db_url, sheet_name="DATA PERDIN Latest", engine="openpyxl")
     db_df = standardize_input_df(db_df)
     st.success("Database lama berhasil dimuat dari Google Sheets.")
 
+    # Kolom kunci dan kolom tambahan
     merge_keys = ["Assignment", "Doc SAP", "Header Text", "Personal Number", "Name"]
     common_cols = [
         "Doc SAP PJUM Pertama Kali",
@@ -332,6 +335,12 @@ try:
         "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
     ]
 
+    # --- Standarisasi nilai kunci agar match meski beda kapital / spasi / tipe data ---
+    for key in merge_keys:
+        processed[key] = processed[key].astype(str).str.strip().str.upper()
+        db_df[key] = db_df[key].astype(str).str.strip().str.upper()
+
+    # --- Merge fleksibel berdasarkan key ---
     merged = processed.merge(
         db_df[merge_keys + common_cols],
         on=merge_keys,
@@ -339,13 +348,22 @@ try:
         suffixes=("", "_db")
     )
 
+    # Gabungkan nilai dari database lama (jangan timpa data baru)
     for col in common_cols:
-        merged[col] = merged[col].combine_first(merged[f"{col}_db"])
+        merged[col] = merged[col].combine_first(merged.get(f"{col}_db"))
         if f"{col}_db" in merged.columns:
             merged.drop(columns=[f"{col}_db"], inplace=True)
 
+    # Hitung berapa baris berhasil match
+    matched = merged[common_cols].notna().any(axis=1).sum()
+    total = len(merged)
+    st.info(f"✅ {matched}/{total} baris berhasil menarik data dari database lama.")
+
     processed = merged
-    st.info("Kolom tambahan dari database lama telah dimasukkan otomatis.")
+
+    # (Opsional) Preview 10 baris hasil match
+    st.caption("Contoh data yang berhasil ditarik dari database lama:")
+    st.dataframe(merged[merged[common_cols].notna().any(axis=1)].head(10), use_container_width=True)
 
 except Exception as e:
     st.warning(f"Gagal memuat database lama: {e}")
