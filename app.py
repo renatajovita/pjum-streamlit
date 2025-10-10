@@ -115,7 +115,7 @@ def compute_sla_and_status(df, holidays_df, ref_date):
             sla_dates.append(sla_date)
             sla_days_list.append(days_to_add)
 
-    df["SLA PJUM + 10/20HK"] = sla_dates
+    df["10HK/20HK"] = sla_dates
 
     # Compute Status: implement logic you gave, with ref_date variable:
     # Excel logic you gave interpreted as:
@@ -127,7 +127,7 @@ def compute_sla_and_status(df, holidays_df, ref_date):
     status_list = []
     for _, row in df.iterrows():
         posting_pjum = row.get("Posting Date PJUM", pd.NaT)
-        sla_date = row.get("SLA PJUM + 10/20HK", pd.NaT)
+        sla_date = row.get("10HK/20HK", pd.NaT)
         end_date = row.get("End Date", pd.NaT)
         if not pd.isna(posting_pjum):
             # compare posting_pjum and sla_date
@@ -155,7 +155,15 @@ def compute_sla_and_status(df, holidays_df, ref_date):
 
     # add empty manual columns per spec
     df["Nomor SAP PJUM Pertama Kali"] = df.get("Nomor SAP PJUM Pertama Kali", "")
-    df["Tanggal Diterima GPBN"] = df["Tanggal Diterima GPBN"].apply(parse_date) if "Tanggal Diterima GPBN" in df.columns else pd.NaT
+    df["Tanggal Masuk GPBN"] = df["Tanggal Masuk GPBN"].apply(parse_date) if "Tanggal Masuk GPBN" in df.columns else pd.NaT
+    # Kolom tambahan baru
+for col in [
+    "Posting Date PJUM (awal input)",
+    "Tanggal Input Unit Kerja",
+    "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari"
+]:
+    if col not in df.columns:
+        df[col] = pd.NaT
     # compute Status No SAP PJUM (blank if no manual input)
     df["Status No SAP PJUM"] = ""
     # Status Final will be created later after manual input
@@ -177,10 +185,10 @@ def compute_status_after_manual(df):
             else:
                 df.at[idx, "Status No SAP PJUM"] = "No Doc SAP Berbeda"
 
-    # Final status: if Tanggal Diterima GPBN exists and <= SLA => becomes Tidak Telat
+    # Final status: if Tanggal Masuk GPBN exists and <= SLA => becomes Tidak Telat
     for idx, row in df.iterrows():
-        tgl_diterima = row.get("Tanggal Diterima GPBN", pd.NaT)
-        sla_date = row.get("SLA PJUM + 10/20HK", pd.NaT)
+        tgl_diterima = row.get("Tanggal Masuk GPBN", pd.NaT)
+        sla_date = row.get("10HK/20HK", pd.NaT)
         orig_status = row.get("Status", "")
         if not pd.isna(tgl_diterima) and not pd.isna(sla_date):
             try:
@@ -302,6 +310,40 @@ else:
 # Standardize and compute
 report_df = standardize_input_df(report_df)
 processed = compute_sla_and_status(report_df, holidays_df, pd.to_datetime(ref_date))
+# --- Merge dengan database lama dari Google Sheets ---
+st.markdown("### Optional: Merge with existing 'DATA PERDIN Latest' database")
+
+db_url = "https://docs.google.com/spreadsheets/d/1wWNnV6GAiV2pfUBcGl3aYqD0mqQ1_EkSbGLmUH9b1Tg/export?format=xlsx&gid=801874172"
+try:
+    db_df = pd.read_excel(db_url, sheet_name="DATA PERDIN Latest", engine="openpyxl")
+    db_df = standardize_input_df(db_df)
+    st.success("Database lama berhasil dimuat dari Google Sheets.")
+
+    merge_keys = ["Assignment", "Doc SAP", "Header Text", "Personal Number", "Name"]
+    common_cols = [
+        "Nomor SAP PJUM Pertama Kali",
+        "Tanggal Masuk GPBN",
+        "Posting Date PJUM (awal input)",
+        "Tanggal Input Unit Kerja",
+        "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari"
+    ]
+
+    merged = processed.merge(
+        db_df[merge_keys + common_cols],
+        on=merge_keys,
+        how="left",
+        suffixes=("", "_db")
+    )
+
+    for col in common_cols:
+        merged[col] = merged[col].combine_first(merged[f"{col}_db"])
+        if f"{col}_db" in merged.columns:
+            merged.drop(columns=[f"{col}_db"], inplace=True)
+
+    processed = merged
+    st.info("Kolom tambahan dari database lama telah dimasukkan otomatis.")
+except Exception as e:
+    st.warning(f"Gagal memuat database lama: {e}")
 
 st.markdown("### Preview (first 50 rows)")
 st.dataframe(processed.head(50), use_container_width=True)
@@ -321,20 +363,23 @@ telat_rows = df_for_edit[telat_filter].copy()
 if len(telat_rows) == 0:
     st.info("No rows with Status = 'Telat' found.")
 else:
-    st.markdown("**Rows with `Telat` — fill `Nomor SAP PJUM Pertama Kali` and `Tanggal Diterima GPBN` if available.**")
+    st.markdown("**Rows with `Telat` — fill `Nomor SAP PJUM Pertama Kali` and `Tanggal Masuk GPBN` if available.**")
     st.caption("Edit cells inline, then click 'Apply manual changes'. Date cells accept dd/mm/yyyy or yyyy-mm-dd.")
 
     if "Nomor SAP PJUM Pertama Kali" not in telat_rows.columns:
         telat_rows["Nomor SAP PJUM Pertama Kali"] = ""
-    if "Tanggal Diterima GPBN" not in telat_rows.columns:
-        telat_rows["Tanggal Diterima GPBN"] = pd.NaT
+    if "Tanggal Masuk GPBN" not in telat_rows.columns:
+        telat_rows["Tanggal Masuk GPBN"] = pd.NaT
 
-    show_cols = [c for c in telat_rows.columns if c in [
-        "Assignment", "Doc SAP", "Doc SAP PJUM", "Header Text",
-        "End Date", "SLA PJUM + 10/20HK", "Status",
-        "Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN",
-        "Status No SAP PJUM", "Status Final"
-    ]]
+show_cols = [c for c in telat_rows.columns if c in [
+    "Assignment", "Doc SAP", "Doc SAP PJUM", "Header Text",
+    "End Date", "10HK/20HK", "Status",
+    "Nomor SAP PJUM Pertama Kali", "Tanggal Masuk GPBN",
+    "Posting Date PJUM (awal input)",
+    "Tanggal Input Unit Kerja",
+    "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari",
+    "Status No SAP PJUM", "Status Final"
+]]
 
     edited = st.data_editor(telat_rows[show_cols], num_rows="dynamic", use_container_width=True)
 
@@ -343,19 +388,19 @@ else:
             edited_map = edited.set_index("Assignment")
             df_for_edit = df_for_edit.set_index("Assignment")
             for aid in edited_map.index:
-                for col in ["Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN"]:
+                for col in ["Nomor SAP PJUM Pertama Kali", "Tanggal Masuk GPBN"]:
                     if col in edited_map.columns:
                         df_for_edit.at[aid, col] = edited_map.at[aid, col]
             df_for_edit = df_for_edit.reset_index()
         else:
             idxs = df_for_edit[df_for_edit["Status"] == "Telat"].index
             for i, idx in enumerate(idxs):
-                for col in ["Nomor SAP PJUM Pertama Kali", "Tanggal Diterima GPBN"]:
+                for col in ["Nomor SAP PJUM Pertama Kali", "Tanggal Masuk GPBN"]:
                     if col in edited.columns:
                         df_for_edit.at[idx, col] = edited.iloc[i][col]
 
-        if "Tanggal Diterima GPBN" in df_for_edit.columns:
-            df_for_edit["Tanggal Diterima GPBN"] = df_for_edit["Tanggal Diterima GPBN"].apply(parse_date)
+        if "Tanggal Masuk GPBN" in df_for_edit.columns:
+            df_for_edit["Tanggal Masuk GPBN"] = df_for_edit["Tanggal Masuk GPBN"].apply(parse_date)
 
         df_for_edit = compute_status_after_manual(df_for_edit)
 
@@ -388,7 +433,13 @@ else:
 # ensure column order: original columns + requested appended columns in order
 # Build base columns as those in original upload, then append requested
 orig_cols = [c for c in report_df.columns]
-append_order = ["SLA PJUM + 10/20HK","Status","Nomor SAP PJUM Pertama Kali","Tanggal Diterima GPBN","Status No SAP PJUM","Status Final"]
+append_order = [
+    "10HK/20HK","Status","Nomor SAP PJUM Pertama Kali","Tanggal Masuk GPBN",
+    "Posting Date PJUM (awal input)",
+    "Tanggal Input Unit Kerja",
+    "Tanggal Rilis Unit Kerja / Masuk Flow Mba Titis / Mas Hari",
+    "Status No SAP PJUM","Status Final"
+]
 cols_to_keep = orig_cols + [c for c in append_order if c in final_df.columns]
 final_df = final_df.reindex(columns=cols_to_keep)
 
@@ -419,6 +470,27 @@ with col_dl1:
     )
 
 with col_dl2:
+    st.markdown("---")
+st.subheader("Database Update")
+
+if st.button("⬆️ Update Database (Google Sheet)"):
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    # Pastikan kamu punya file credentials.json di folder yang sama
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
+    client = gspread.authorize(creds)
+
+    sheet = client.open_by_key("1wWNnV6GAiV2pfUBcGl3aYqD0mqQ1_EkSbGLmUH9b1Tg")
+    ws = sheet.worksheet("DATA PERDIN Latest")
+
+    # Ganti isi sheet dengan data baru
+    ws.clear()
+    ws.update([final_df.columns.values.tolist()] + final_df.fillna("").values.tolist())
+
+    st.success("Database di Google Sheets berhasil diperbarui!")
+
     st.markdown("**⬇️ Download Setelah Manual Input / Apply Changes**")
     bio_after = to_excel_bytes(final_df)
     st.download_button(
