@@ -319,11 +319,11 @@ st.markdown("### Optional: Merge with existing 'DATA PERDIN Latest' database")
 
 db_url = "https://docs.google.com/spreadsheets/d/1wWNnV6GAiV2pfUBcGl3aYqD0mqQ1_EkSbGLmUH9b1Tg/export?format=xlsx&gid=801874172"
 try:
-    db_df = pd.read_excel(db_url, sheet_name="DATA PERDIN Latest", engine="openpyxl")
-    db_df = standardize_input_df(db_df)
-    st.success("Database lama berhasil dimuat dari Google Sheets.")
+db_df = pd.read_excel(db_url, sheet_name="DATA PERDIN Latest", engine="openpyxl")
+db_df = standardize_input_df(db_df)
+st.success("Database lama berhasil dimuat dari Google Sheets.")
 
-    merge_keys = ["Assignment", "Doc SAP", "Header Text", "Personal Number", "Name"]
+merge_keys = ["Assignment", "Doc SAP", "Header Text", "Personal Number", "Name"]
 common_cols = [
     "Doc SAP PJUM Pertama Kali",
     "Tanggal Masuk GPBN",
@@ -332,20 +332,21 @@ common_cols = [
     "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
 ]
 
-    merged = processed.merge(
-        db_df[merge_keys + common_cols],
-        on=merge_keys,
-        how="left",
-        suffixes=("", "_db")
-    )
+merged = processed.merge(
+    db_df[merge_keys + common_cols],
+    on=merge_keys,
+    how="left",
+    suffixes=("", "_db")
+)
 
-    for col in common_cols:
-        merged[col] = merged[col].combine_first(merged[f"{col}_db"])
-        if f"{col}_db" in merged.columns:
-            merged.drop(columns=[f"{col}_db"], inplace=True)
+for col in common_cols:
+    merged[col] = merged[col].combine_first(merged[f"{col}_db"])
+    if f"{col}_db" in merged.columns:
+        merged.drop(columns=[f"{col}_db"], inplace=True)
 
-    processed = merged
-    st.info("Kolom tambahan dari database lama telah dimasukkan otomatis.")
+processed = merged
+st.info("Kolom tambahan dari database lama telah dimasukkan otomatis.")
+
 except Exception as e:
     st.warning(f"Gagal memuat database lama: {e}")
 
