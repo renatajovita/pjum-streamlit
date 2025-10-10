@@ -376,43 +376,47 @@ try:
         db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
 
     # Buat dictionary lookup
-# --- Normalisasi kolom dan siapkan untuk merge fleksibel ---
-for c in available_keys:
-    processed[f"norm_{c}"] = processed[c].apply(normalize_text)
-    db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
+    # --- Sinkronisasi data lama ke file upload (versi fleksibel tanpa error unique) ---
+    available_keys = real_key_cols
+    available_extras = extra_cols
 
-# Ambil hanya kolom yang dibutuhkan dari database
-db_sub = db_df[[*available_keys, *available_extras]].copy()
+    # --- Normalisasi kolom dan siapkan untuk merge fleksibel ---
+    for c in available_keys:
+        processed[f"norm_{c}"] = processed[c].apply(normalize_text)
+        db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
 
-# Drop duplikat berdasarkan key (ambil yang pertama ditemukan)
-db_sub = db_sub.drop_duplicates(subset=available_keys, keep="first")
+    # Ambil hanya kolom yang dibutuhkan dari database
+    db_sub = db_df[[*available_keys, *available_extras]].copy()
 
-# Merge: left join antara processed dan db_sub
-merged = pd.merge(
-    processed,
-    db_sub,
-    on=available_keys,
-    how="left",
-    suffixes=("", "_db")
-)
+    # Drop duplikat berdasarkan key (ambil yang pertama ditemukan)
+    db_sub = db_sub.drop_duplicates(subset=available_keys, keep="first")
 
-# Isi kolom tambahan dari hasil merge
-for c in available_extras:
-    if f"{c}_db" in merged.columns:
-        merged[c] = merged[c].combine_first(merged[f"{c}_db"])
-        merged.drop(columns=[f"{c}_db"], inplace=True)
-    elif c not in merged.columns:
-        merged[c] = None
+    # Merge: left join antara processed dan db_sub
+    merged = pd.merge(
+        processed,
+        db_sub,
+        on=available_keys,
+        how="left",
+        suffixes=("", "_db")
+    )
 
-# Hapus kolom bantu normalisasi
-for c in available_keys:
-    if f"norm_{c}" in merged.columns:
-        merged.drop(columns=[f"norm_{c}"], inplace=True)
-    if f"norm_{c}_db" in merged.columns:
-        merged.drop(columns=[f"norm_{c}_db"], inplace=True)
+    # Isi kolom tambahan dari hasil merge
+    for c in available_extras:
+        if f"{c}_db" in merged.columns:
+            merged[c] = merged[c].combine_first(merged[f"{c}_db"])
+            merged.drop(columns=[f"{c}_db"], inplace=True)
+        elif c not in merged.columns:
+            merged[c] = None
 
-processed = merged.copy()
-st.success(f"✅ Sinkronisasi database selesai. {merged[available_extras].notna().any(axis=1).sum()} baris berhasil diperbarui dari database lama.")
+    # Hapus kolom bantu normalisasi
+    for c in available_keys:
+        if f"norm_{c}" in merged.columns:
+            merged.drop(columns=[f"norm_{c}"], inplace=True)
+        if f"norm_{c}_db" in merged.columns:
+            merged.drop(columns=[f"norm_{c}_db"], inplace=True)
+
+    processed = merged.copy()
+    st.success(f"✅ Sinkronisasi database selesai. {merged[available_extras].notna().any(axis=1).sum()} baris berhasil diperbarui dari database lama.")
 
     st.success(f"✅ {matched_rows} baris berhasil diperbarui dari database lama (berdasarkan kombinasi {', '.join(real_key_cols)}).")
 
