@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import calendar
 from openpyxl import load_workbook
 
-st.set_page_config(page_title="PJUM PJUM Perdin", layout="wide")
+st.set_page_config(page_title="automatics-reporting", layout="wide")
 
 # -------------------------
 # Helper functions
