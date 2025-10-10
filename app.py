@@ -1,5 +1,4 @@
-# app.py
-import streamlit as st
+mport streamlit as st
 import pandas as pd
 import numpy as np
 from io import BytesIO
@@ -65,10 +64,9 @@ def standardize_input_df(df):
     for col in date_candidates:
         if col in df.columns:
             df[col] = df[col].apply(parse_date)
-# pastikan key kolom selalu string
-for c in real_key_cols:
-    processed[c] = processed[c].astype(str).fillna("").str.strip().str.lower()
-    db_df[c] = db_df[c].astype(str).fillna("").str.strip().str.lower()
+    # numeric candidate
+    if "Nilai" in df.columns:
+        df["Nilai"] = pd.to_numeric(df["Nilai"], errors="coerce")
     return df
 
 def compute_sla_and_status(df, holidays_df, ref_date):
@@ -363,15 +361,18 @@ try:
     # Drop duplikat dari database lama berdasarkan kombinasi kunci
     db_df = db_df.drop_duplicates(subset=real_key_cols, keep="first")
 
-# Terapkan ke semua kolom yang akan merge / ambil dari DB
-all_cols_to_normalize = real_key_cols + extra_cols
+    def normalize_text(x):
+        if pd.isna(x):
+            return ""
+        x = str(x).strip().lower()
+        x = x.replace(",", "").replace(".", "").replace("idr", "").replace("usd", "")
+        x = x.replace(" ", "").replace("\xa0", "")
+        return x
 
-for c in all_cols_to_normalize:
-    if c in processed.columns:
-        processed[c] = processed[c].apply(normalize_text)
-    if c in db_df.columns:
-        db_df[c] = db_df[c].apply(normalize_text)
-
+    # Normalisasi kunci
+    for c in real_key_cols:
+        processed[f"norm_{c}"] = processed[c].apply(normalize_text)
+        db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
 
     # Buat dictionary lookup
     # --- Sinkronisasi data lama ke file upload (versi fleksibel tanpa error unique) ---
@@ -390,27 +391,19 @@ for c in all_cols_to_normalize:
     db_sub = db_sub.drop_duplicates(subset=available_keys, keep="first")
 
     # Merge: left join antara processed dan db_sub
-# tambahkan reset index untuk menjaga urutan
-processed["_original_index"] = np.arange(len(processed))
-merged = pd.merge(
-    processed,
-    db_sub,
-    on=available_keys,
-    how="left",
-    suffixes=("", "_db")
-)
-merged = merged.sort_values("_original_index").drop(columns=["_original_index"])
+    merged = pd.merge(
+        processed,
+        db_sub,
+        on=available_keys,
+        how="left",
+        suffixes=("", "_db")
+    )
 
     # Isi kolom tambahan dari hasil merge
-for c in available_extras:
-    db_col = f"{c}_db"
-    if db_col in merged.columns:
-        # gunakan string empty jika NaN
-        merged[c] = merged[c].fillna("")  # data upload
-        merged[c] = merged[c].mask(merged[c]=="", merged[db_col].fillna(""))
-        merged.drop(columns=[db_col], inplace=True)
-    elif c not in merged.columns:
-        merged[c] = ""
+    for c in available_extras:
+        if f"{c}_db" in merged.columns:
+            merged[c] = merged[c].combine_first(merged[f"{c}_db"])
+            merged.drop(columns=[f"{c}_db"], inplace=True)
         elif c not in merged.columns:
             merged[c] = None
 
