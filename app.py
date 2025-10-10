@@ -591,3 +591,4 @@ st.markdown("""
 - Reference date defaults to today; change it if you want to re-evaluate statuses for a different date.
 - Manual edits are applied only after clicking **Apply manual changes**.
 """)
+
