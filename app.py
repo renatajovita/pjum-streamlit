@@ -314,7 +314,6 @@ else:
 # Standardize and compute
 report_df = standardize_input_df(report_df)
 processed = compute_sla_and_status(report_df, holidays_df, pd.to_datetime(ref_date))
-# --- Merge dengan database lama dari Google Sheets ---
 st.markdown("### Optional: Merge with existing 'DATA PERDIN Latest' database")
 
 db_url = "https://docs.google.com/spreadsheets/d/1wWNnV6GAiV2pfUBcGl3aYqD0mqQ1_EkSbGLmUH9b1Tg/export?format=xlsx&gid=801874172"
@@ -324,7 +323,6 @@ try:
     db_df = standardize_input_df(db_df)
     st.success("Database lama berhasil dimuat dari Google Sheets.")
 
-    # --- Kolom untuk pencocokan dan kolom tambahan yang diambil ---
     key_cols = ["Header Text", "Nilai", "Name", "Doc SAP PJUM"]
     extra_cols = [
         "Doc SAP PJUM Pertama Kali",
@@ -334,7 +332,6 @@ try:
         "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
     ]
 
-    # Pastikan semua kolom ada di database lama
     available_keys = [c for c in key_cols if c in db_df.columns and c in processed.columns]
     available_extras = [c for c in extra_cols if c in db_df.columns]
 
@@ -344,32 +341,44 @@ try:
         st.info(f"Kolom pencocokan: {', '.join(available_keys)}")
         st.info(f"Kolom tambahan yang akan diambil: {', '.join(available_extras)}")
 
-        # Samakan kapitalisasi & trim spasi biar matching aman
-        for c in available_keys:
-            processed[c] = processed[c].astype(str).str.strip().str.upper()
-            db_df[c] = db_df[c].astype(str).str.strip().str.upper()
+        # Normalisasi fungsi
+        def normalize_text(x):
+            if pd.isna(x): 
+                return ""
+            return str(x).strip().lower().replace(",", "").replace(".", "").replace("idr", "").replace("usd", "").replace(" ", "")
 
-        # Buat dict lookup unik
+        # Normalisasi kolom kunci di dua dataset
+        for c in available_keys:
+            processed[f"norm_{c}"] = processed[c].apply(normalize_text)
+            db_df[f"norm_{c}"] = db_df[c].apply(normalize_text)
+
+        # Drop duplikat biar lookup unik
+        db_df_unique = db_df.drop_duplicates(subset=[f"norm_{c}" for c in available_keys], keep="first")
+
+        # Buat dict lookup: key → baris tambahan
         db_lookup = (
-            db_df.drop_duplicates(subset=available_keys, keep="first")
-            .set_index(available_keys)[available_extras]
+            db_df_unique
+            .set_index([f"norm_{c}" for c in available_keys])[available_extras]
             .to_dict("index")
         )
 
-        # Tambahkan kolom kosong dulu di processed
+        # Tambahkan kolom tambahan ke processed (kalau belum ada)
         for c in available_extras:
             if c not in processed.columns:
                 processed[c] = None
 
         matched_rows = 0
         for idx, row in processed.iterrows():
-            key = tuple(row[c] for c in available_keys)
+            key = tuple(row[f"norm_{c}"] for c in available_keys)
             if key in db_lookup:
                 for c in available_extras:
                     processed.at[idx, c] = db_lookup[key].get(c)
                 matched_rows += 1
 
         st.success(f"✅ {matched_rows} baris berhasil diperbarui dari database lama.")
+
+        # Clean kolom bantu
+        processed.drop(columns=[f"norm_{c}" for c in available_keys], inplace=True)
 
         st.caption("Contoh hasil update dari database lama:")
         st.dataframe(processed.head(10), use_container_width=True)
