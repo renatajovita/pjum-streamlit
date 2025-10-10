@@ -320,53 +320,59 @@ st.markdown("### Optional: Merge with existing 'DATA PERDIN Latest' database")
 db_url = "https://docs.google.com/spreadsheets/d/1wWNnV6GAiV2pfUBcGl3aYqD0mqQ1_EkSbGLmUH9b1Tg/export?format=xlsx&gid=801874172"
 
 try:
-    # Load data lama
     db_df = pd.read_excel(db_url, sheet_name="DATA PERDIN Latest", engine="openpyxl")
     db_df = standardize_input_df(db_df)
     st.success("Database lama berhasil dimuat dari Google Sheets.")
 
-    # --- Kolom kunci & kolom yang akan diambil ---
-    merge_keys = ["Assignment", "Doc SAP", "Header Text", "Personal Number", "Name"]
-    common_cols = ["Header Text", "Nilai", "Nama", "Doc SAP PJUM"]
+    # --- Kolom untuk pencocokan dan kolom tambahan yang diambil ---
+    key_cols = ["Header Text", "Nilai", "Name", "Doc SAP PJUM"]
+    extra_cols = [
+        "Doc SAP PJUM Pertama Kali",
+        "Tanggal Masuk GPBN",
+        "Posting Date PJUM yang awal input",
+        "Tanggal Input oleh unit kerja",
+        "Tanggal Rilis Unit kerja/ Masuk Flow Mba Titis/ Mas Hari"
+    ]
 
-    # Pastikan kolom-kolom itu ada di database lama
-    existing_cols = [col for col in common_cols if col in db_df.columns]
-    if not existing_cols:
-        st.warning("⚠️ Tidak ada kolom cocok ditemukan di database lama.")
+    # Pastikan semua kolom ada di database lama
+    available_keys = [c for c in key_cols if c in db_df.columns and c in processed.columns]
+    available_extras = [c for c in extra_cols if c in db_df.columns]
+
+    if not available_keys:
+        st.warning("⚠️ Tidak ada kolom pencocokan yang cocok di kedua dataset.")
     else:
-        st.write(f"Kolom yang akan dimapping: {', '.join(existing_cols)}")
+        st.info(f"Kolom pencocokan: {', '.join(available_keys)}")
+        st.info(f"Kolom tambahan yang akan diambil: {', '.join(available_extras)}")
 
-        # --- Samakan format key agar bisa match meskipun beda kapital/spasi ---
-        for key in merge_keys:
-            if key in processed.columns and key in db_df.columns:
-                processed[key] = processed[key].astype(str).str.strip().str.upper()
-                db_df[key] = db_df[key].astype(str).str.strip().str.upper()
+        # Samakan kapitalisasi & trim spasi biar matching aman
+        for c in available_keys:
+            processed[c] = processed[c].astype(str).str.strip().str.upper()
+            db_df[c] = db_df[c].astype(str).str.strip().str.upper()
 
-        # --- Merge fleksibel ---
-        merged = processed.merge(
-            db_df[merge_keys + existing_cols],
-            on=merge_keys,
-            how="left",
-            suffixes=("", "_db")
+        # Buat dict lookup unik
+        db_lookup = (
+            db_df.drop_duplicates(subset=available_keys, keep="first")
+            .set_index(available_keys)[available_extras]
+            .to_dict("index")
         )
 
-        # Gabungkan data lama tanpa menimpa data baru
-        for col in existing_cols:
-            col_db = f"{col}_db"
-            if col_db in merged.columns:
-                merged[col] = merged[col].combine_first(merged[col_db])
-                merged.drop(columns=[col_db], inplace=True)
+        # Tambahkan kolom kosong dulu di processed
+        for c in available_extras:
+            if c not in processed.columns:
+                processed[c] = None
 
-        # Hitung berapa baris berhasil dapat data dari database lama
-        matched = merged[existing_cols].notna().any(axis=1).sum()
-        total = len(merged)
-        st.info(f"✅ {matched}/{total} baris berhasil menarik data dari database lama.")
+        matched_rows = 0
+        for idx, row in processed.iterrows():
+            key = tuple(row[c] for c in available_keys)
+            if key in db_lookup:
+                for c in available_extras:
+                    processed.at[idx, c] = db_lookup[key].get(c)
+                matched_rows += 1
 
-        # Tampilkan contoh hasil merge
-        st.caption("Contoh hasil merge:")
-        st.dataframe(merged[merged[existing_cols].notna().any(axis=1)].head(10), use_container_width=True)
+        st.success(f"✅ {matched_rows} baris berhasil diperbarui dari database lama.")
 
-        processed = merged
+        st.caption("Contoh hasil update dari database lama:")
+        st.dataframe(processed.head(10), use_container_width=True)
 
 except Exception as e:
     st.warning(f"Gagal memuat database lama: {e}")
